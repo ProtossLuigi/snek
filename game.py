@@ -3,6 +3,8 @@ import pygame
 import time
 import random
 
+from fuzzy_controller import calculate_direction
+
 snake_speed = 15
 
 # Window size
@@ -20,7 +22,7 @@ blue = pygame.Color(0, 0, 255)
 pygame.init()
 
 # Initialise game window
-pygame.display.set_caption('GeeksforGeeks Snakes')
+pygame.display.set_caption('Snek')
 game_window = pygame.display.set_mode((window_x, window_y))
 
 # FPS (frames per second) controller
@@ -75,7 +77,7 @@ def game_over():
 	# creating a text surface on which text
 	# will be drawn
 	game_over_surface = my_font.render(
-		'Your Score is : ' + str(score), True, red)
+		'Score: ' + str(score), True, red)
 	
 	# create a rectangular object for the text
 	# surface object
@@ -102,16 +104,18 @@ def game_over():
 while True:
 	
 	# handling key events
-	for event in pygame.event.get():
-		if event.type == pygame.KEYDOWN:
-			if event.key == pygame.K_UP:
-				change_to = 'UP'
-			if event.key == pygame.K_DOWN:
-				change_to = 'DOWN'
-			if event.key == pygame.K_LEFT:
-				change_to = 'LEFT'
-			if event.key == pygame.K_RIGHT:
-				change_to = 'RIGHT'
+	# for event in pygame.event.get():
+	# 	if event.type == pygame.KEYDOWN:
+	# 		if event.key == pygame.K_UP:
+	# 			change_to = 'UP'
+	# 		if event.key == pygame.K_DOWN:
+	# 			change_to = 'DOWN'
+	# 		if event.key == pygame.K_LEFT:
+	# 			change_to = 'LEFT'
+	# 		if event.key == pygame.K_RIGHT:
+	# 			change_to = 'RIGHT'
+
+	change_to = calculate_direction(snake_position, snake_body, fruit_position, window_x, window_y)
 
 	# If two keys pressed simultaneously
 	# we don't want snake to move into two
