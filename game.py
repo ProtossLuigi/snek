@@ -2,14 +2,10 @@
 import pygame
 import time
 import random
-
-from fuzzy_controller import calculate_direction
+from fuzzy_controller import calculate_direction, window_y, window_x
 
 snake_speed = 15
 
-# Window size
-window_x = 720
-window_y = 480
 
 # defining colors
 black = pygame.Color(0, 0, 0)
@@ -102,7 +98,6 @@ def game_over():
 
 # Main Function
 while True:
-	
 	# handling key events
 	# for event in pygame.event.get():
 	# 	if event.type == pygame.KEYDOWN:
@@ -114,8 +109,7 @@ while True:
 	# 			change_to = 'LEFT'
 	# 		if event.key == pygame.K_RIGHT:
 	# 			change_to = 'RIGHT'
-
-	change_to = calculate_direction(snake_position, snake_body, fruit_position, window_x, window_y)
+	change_to = calculate_direction(snake_position, direction, snake_body, fruit_position)
 
 	# If two keys pressed simultaneously
 	# we don't want snake to move into two
