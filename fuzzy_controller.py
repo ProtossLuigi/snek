@@ -44,15 +44,67 @@ def convert_pixels_to_grid_cords(coordinates):
 def fruit_rule(game_state):
     snake_position = game_state["snake_position"]
     fruit_position = game_state["fruit_position"]
-    distance = snake_position - fruit_position
+    distance = fruit_position - snake_position
 
     dist_max = (max(window_x, window_y) // pixel_size - 1)
     dy_range = np.arange(-dist_max, dist_max)
-    dy_high = fuzz.smf(dy_range, 0, 10)
+    dy_high = fuzz.smf(dy_range, -10, 0)
     dy_low = 1 - dy_high
 
+    # dy_high -> trzeba zawrocic/skrecic
+    # dy_low -> idziemy w strone owoca
     dy_level_low = fuzz.interp_membership(dy_range, dy_low, distance[1])
     dy_level_high = fuzz.interp_membership(dy_range, dy_high, distance[1])
+
+    # dx_minus -> lewo
+    # dx_plus -> prawo
+    # dx_center -> do przodu
+    zero_index = np.where(dy_range == 0)[0][0]
+    dx_center = fuzz.gaussmf(dy_range, 0, 3)
+    dx_plus = 1 - dx_center
+    dx_plus[0:zero_index] = 0
+    dx_minus = 1 - dx_center
+    dx_minus[zero_index:] = 0
+
+    dx_level_low = fuzz.interp_membership(dy_range, dx_minus, distance[0])
+    dx_level_center = fuzz.interp_membership(dy_range, dx_center, distance[0])
+    dx_level_high = fuzz.interp_membership(dy_range, dx_plus, distance[0])
+
+    return {
+        "dy_low": dy_level_low,
+        "dy_high": dy_level_high,
+        "dx_low": dx_level_low,
+        "dx_center": dx_level_center,
+        "dx_high": dx_level_high
+    }
+
+
+def evaluate_rules(rules):
+    dir_range = np.arange(0, 1, 0.01)
+    dir_forward = fuzz.trimf(dir_range, [0.3, 0.5, 0.7])
+    dir_left = fuzz.trimf(dir_range, [0, 0.1, 0.2])
+    dir_right = fuzz.trimf(dir_range, [0.8, 0.9, 1.])
+
+    # 1 rule: if dy_low and dx_center => dir_forward
+    # 2 rule: if dy_high and dx_low => dir_left
+    # 3 rule: if dy_high and dx_high => dir_right
+
+    out_activations = []
+    rule1 = np.fmin(rules["dy_low"], rules["dx_center"])
+    out_activations.append(np.fmin(rule1, dir_forward))
+
+    rule2 = np.fmin(rules["dy_high"], rules["dx_low"])
+    out_activations.append(np.fmin(rule2, dir_left))
+
+    rule3 = np.fmin(rules["dy_high"], rules["dx_high"])
+    out_activations.append(np.fmin(rule3, dir_right))
+
+    aggregated = np.fmax(out_activations[0], out_activations[1])
+    for activation in out_activations[2:]:
+        aggregated = np.fmax(aggregated, activation)
+
+    out = fuzz.defuzz(dir_range, aggregated, 'centroid')
+    return out
 
 
 def calculate_direction(snake_position, snake_direction, snake_body, fruit_position):
@@ -66,6 +118,21 @@ def calculate_direction(snake_position, snake_direction, snake_body, fruit_posit
 
     # Delta x i delta y - fruit
     game_state = rotate_board(game_state)
-    return random.choice(['UP', 'DOWN', 'LEFT', 'RIGHT'])
+    fruit_rules = fruit_rule(game_state)
+    try:
+        out = evaluate_rules(fruit_rules)
+        print(out) # out -> value from range 0 - 1
+    except AssertionError:
+        out = 0.5
+
+    directions = ['UP', 'RIGHT', 'DOWN', 'LEFT']
+    direction_index = 0
+    if out < 0.25:
+        direction_index = 3
+    elif out > 0.75:
+        direction_index = 1
+
+    return directions[(direction_index + directions.index(snake_direction)) % len(directions)]
+    # return random.choice(['UP', 'DOWN', 'LEFT', 'RIGHT'])
 
 # 11 5
