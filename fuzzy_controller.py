@@ -140,10 +140,16 @@ def evaluate_rules(rules):
     rule5 = np.fmin(rules["wall_y_low"], rules["wall_x_high"])
     out_activations.append(np.fmin(rule5, dir_left))
 
+    counter = 0
     aggregated = np.fmax(out_activations[0], out_activations[1])
+    # print("Agg ", counter, ": ", fuzz.defuzz(dir_range, aggregated, 'centroid'))
+    counter += 1
     for activation in out_activations[2:]:
         aggregated = np.fmax(aggregated, activation)
-
+        # print(len(aggregated))
+        # print("Agg ", counter, ": ", fuzz.defuzz(dir_range, aggregated, 'centroid'))
+        # print(len(aggregated))
+        counter += 1
     out = fuzz.defuzz(dir_range, aggregated, 'centroid')
     print(out)
     return out
@@ -167,7 +173,8 @@ def calculate_direction(snake_position, snake_direction, snake_body, fruit_posit
     try:
         out = evaluate_rules(rules)
         # print(out)  # out -> value from range 0 - 1
-    except AssertionError:
+    except AssertionError as e:
+        print('dupa ',e)
         out = 0.5
 
     directions = ['UP', 'RIGHT', 'DOWN', 'LEFT']
