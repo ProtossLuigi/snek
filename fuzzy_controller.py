@@ -46,7 +46,7 @@ def fruit_rule(game_state):
     fruit_position = game_state["fruit_position"]
     distance = fruit_position - snake_position
 
-    dist_max = (max(window_x, window_y) // pixel_size - 1)
+    dist_max = (max(window_x, window_y) // pixel_size)
     dy_range = np.arange(-dist_max, dist_max)
     dy_high = fuzz.smf(dy_range, -10, 0)
     dy_low = 1 - dy_high
@@ -95,7 +95,7 @@ def walls_rule(game_state):
     wall_x_high = fuzz.smf(head_x_range, maximum - maximum * 0.2, maximum)
     wall_x_low = 1 - fuzz.smf(head_x_range, 0, maximum * 0.2)
 
-    head_y_range = np.arange(0, 71)
+    head_y_range = np.arange(0, 72)
 
     wall_y_low = 1 - fuzz.smf(head_y_range, 0, 10)
     wall_y_high = 1 - wall_y_low
@@ -115,8 +115,8 @@ def walls_rule(game_state):
 def evaluate_rules(rules):
     dir_range = np.arange(0, 1, 0.01)
     dir_forward = fuzz.trimf(dir_range, [0.3, 0.5, 0.7])
-    dir_left = fuzz.trimf(dir_range, [0, 0.1, 0.2])
-    dir_right = fuzz.trimf(dir_range, [0.8, 0.9, 1.])
+    dir_left = fuzz.trimf(dir_range, [0, 0.1, 0.3])
+    dir_right = fuzz.trimf(dir_range, [0.7, 0.9, 1.])
 
     # 1 rule: if dy_low and dx_center => dir_forward
     # 2 rule: if dy_high and dx_low => dir_left
