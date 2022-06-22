@@ -79,6 +79,39 @@ def fruit_rule(game_state):
     }
 
 
+def walls_rule(game_state):
+    snake_position = game_state["snake_position"]
+    snake_direction = game_state["snake_direction"]
+
+    if snake_direction == "LEFT" or snake_direction == "RIGHT":
+        maximum = (window_x // pixel_size - 1)
+    else:
+        maximum = (window_y // pixel_size - 1)
+    # y spore -> na wprost
+    # y male -> skret
+    # x male -> w prawo
+    # x duze -> w lewo
+    head_x_range = np.arange(0, maximum)
+    wall_x_high = fuzz.smf(head_x_range, maximum - maximum * 0.2, maximum)
+    wall_x_low = 1 - fuzz.smf(head_x_range, 0, maximum * 0.2)
+
+    head_y_range = np.arange(0, 71)
+
+    wall_y_low = 1 - fuzz.smf(head_y_range, 0, 10)
+    wall_y_high = 1 - wall_y_low
+
+    x_level_high = fuzz.interp_membership(head_x_range, wall_x_high, snake_position[0])
+    x_level_low = fuzz.interp_membership(head_x_range, wall_x_low, snake_position[0])
+    y_level_high = fuzz.interp_membership(head_y_range, wall_y_high, snake_position[1])
+    y_level_low = fuzz.interp_membership(head_y_range, wall_y_low, snake_position[1])
+    return {
+        "wall_x_high": x_level_high,
+        "wall_x_low": x_level_low,
+        "wall_y_high": y_level_high,
+        "wall_y_low": y_level_low
+    }
+
+
 def evaluate_rules(rules):
     dir_range = np.arange(0, 1, 0.01)
     dir_forward = fuzz.trimf(dir_range, [0.3, 0.5, 0.7])
@@ -88,6 +121,8 @@ def evaluate_rules(rules):
     # 1 rule: if dy_low and dx_center => dir_forward
     # 2 rule: if dy_high and dx_low => dir_left
     # 3 rule: if dy_high and dx_high => dir_right
+    # 4 rule: if wall_y_low and wall_x_low => dir_right
+    # 5 rule: if wall_y_low and wall_x_high => dir_left
 
     out_activations = []
     rule1 = np.fmin(rules["dy_low"], rules["dx_center"])
@@ -99,11 +134,18 @@ def evaluate_rules(rules):
     rule3 = np.fmin(rules["dy_high"], rules["dx_high"])
     out_activations.append(np.fmin(rule3, dir_right))
 
+    rule4 = np.fmin(rules["wall_y_low"], rules["wall_x_low"])
+    out_activations.append(np.fmin(rule4, dir_right))
+
+    rule5 = np.fmin(rules["wall_y_low"], rules["wall_x_high"])
+    out_activations.append(np.fmin(rule5, dir_left))
+
     aggregated = np.fmax(out_activations[0], out_activations[1])
     for activation in out_activations[2:]:
         aggregated = np.fmax(aggregated, activation)
 
     out = fuzz.defuzz(dir_range, aggregated, 'centroid')
+    print(out)
     return out
 
 
@@ -118,10 +160,13 @@ def calculate_direction(snake_position, snake_direction, snake_body, fruit_posit
 
     # Delta x i delta y - fruit
     game_state = rotate_board(game_state)
-    fruit_rules = fruit_rule(game_state)
+
+    rules = {}
+    rules.update(fruit_rule(game_state))
+    rules.update(walls_rule(game_state))
     try:
-        out = evaluate_rules(fruit_rules)
-        print(out) # out -> value from range 0 - 1
+        out = evaluate_rules(rules)
+        # print(out)  # out -> value from range 0 - 1
     except AssertionError:
         out = 0.5
 
