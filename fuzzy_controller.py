@@ -140,19 +140,24 @@ def evaluate_rules(rules):
     rule5 = np.fmin(rules["wall_y_low"], rules["wall_x_high"])
     out_activations.append(np.fmin(rule5, dir_left))
 
-    counter = 0
     aggregated = np.fmax(out_activations[0], out_activations[1])
-    # print("Agg ", counter, ": ", fuzz.defuzz(dir_range, aggregated, 'centroid'))
-    counter += 1
     for activation in out_activations[2:]:
         aggregated = np.fmax(aggregated, activation)
-        # print(len(aggregated))
-        # print("Agg ", counter, ": ", fuzz.defuzz(dir_range, aggregated, 'centroid'))
-        # print(len(aggregated))
-        counter += 1
     out = fuzz.defuzz(dir_range, aggregated, 'centroid')
-    print(out)
     return out
+
+
+def avoid_wall(chosen_direction, snake_position):
+    if chosen_direction == "UP" and snake_position[1] < 20:
+        return random.choice(["LEFT", "RIGHT"])
+    elif chosen_direction == "LEFT" and snake_position[0] < 20:
+        return random.choice(["UP", "DOWN"])
+    elif chosen_direction == "RIGHT" and snake_position[0] > window_x - 20:
+        return random.choice(["UP", "DOWN"])
+    elif chosen_direction == "DOWN" and snake_position[1] > window_y - 20:
+        return random.choice(["LEFT", "RIGHT"])
+    else:
+        return chosen_direction
 
 
 def calculate_direction(snake_position, snake_direction, snake_body, fruit_position):
@@ -172,19 +177,19 @@ def calculate_direction(snake_position, snake_direction, snake_body, fruit_posit
     rules.update(walls_rule(game_state))
     try:
         out = evaluate_rules(rules)
-        # print(out)  # out -> value from range 0 - 1
     except AssertionError as e:
-        print('dupa ',e)
+        print(e)
         out = 0.5
 
     directions = ['UP', 'RIGHT', 'DOWN', 'LEFT']
     direction_index = 0
-    if out < 0.25:
+    if out < 0.2:
         direction_index = 3
-    elif out > 0.75:
+    elif out > 0.8:
         direction_index = 1
 
-    return directions[(direction_index + directions.index(snake_direction)) % len(directions)]
-    # return random.choice(['UP', 'DOWN', 'LEFT', 'RIGHT'])
+    chosen_direction = directions[(direction_index + directions.index(snake_direction)) % len(directions)]
+    chosen_direction = avoid_wall(chosen_direction, snake_position)
+    return chosen_direction
 
 # 11 5
