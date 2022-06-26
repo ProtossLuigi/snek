@@ -160,6 +160,29 @@ def avoid_wall(chosen_direction, snake_position):
         return chosen_direction
 
 
+def will_collide_with_itself(snake_position, snake_body, direction):
+    for body in snake_body[1:]:
+        if body[1] == snake_position[1]:
+            if direction == "RIGHT":
+                if abs(snake_position[0] + 10 - body[0]) <= 15:
+                    print(f'KOLIZJA {direction} - {snake_position} with {body}')
+                    return True
+            if direction == "LEFT":
+                if abs(snake_position[0] - 10 - body[0]) <= 15:
+                    print(f'KOLIZJA {direction} - {snake_position} with {body}')
+                    return True
+        elif body[0] == snake_position[0]:
+            if direction == "UP":
+                if abs(snake_position[1] - 10 - body[1]) <= 15:
+                    print(f'KOLIZJA {direction} - {snake_position} with {body}')
+                    return True
+            if direction == "DOWN":
+                if abs(snake_position[1] + 10 - body[1]) <= 15:
+                    print(f'KOLIZJA {direction} - {snake_position} with {body}')
+                    return True
+    return False
+
+
 def calculate_direction(snake_position, snake_direction, snake_body, fruit_position):
     # TODO
     game_state = {
@@ -189,6 +212,10 @@ def calculate_direction(snake_position, snake_direction, snake_body, fruit_posit
         direction_index = 1
 
     chosen_direction = directions[(direction_index + directions.index(snake_direction)) % len(directions)]
+
+    while will_collide_with_itself(snake_position, snake_body, chosen_direction):
+        chosen_direction = random.choice([dir_candidate for dir_candidate in directions if dir_candidate != chosen_direction])
+        print('Changed to: ',chosen_direction)
     chosen_direction = avoid_wall(chosen_direction, snake_position)
     return chosen_direction
 
