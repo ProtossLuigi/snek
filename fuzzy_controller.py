@@ -41,15 +41,76 @@ def convert_pixels_to_grid_cords(coordinates):
     return coordinates // pixel_size
 
 
+def make_board(game_state):
+    board = np.zeros((window_x // pixel_size, window_y // pixel_size), dtype=np.uint8)
+    if game_state['snake_direction'] == 'LEFT' or game_state['snake_direction'] == 'RIGHT':
+        board = board.T
+    for position in game_state['snake_body']:
+        board[tuple(position)] = 2
+    board[tuple(game_state['snake_position'])] = 1
+    board[tuple(game_state['fruit_position'])] = 3
+    return board
+
+
+def count_obstacles(board, orientation):
+    snake_position = list(zip(*np.where(board == 1)))[0]
+    kernel = np.array(
+        [
+            [0.05, 0.1, 0.05],
+            [0.1, 0.2, 0.1],
+            [0.2, 1., 0.2]
+        ]
+    ).T
+    if orientation == 'LEFT':
+        kernel = np.flip(kernel.T, (1))
+    elif orientation == 'RIGHT':
+        kernel = np.flip(kernel.T, (0))
+    box_size = 3
+    mid_offset = (box_size - 1) // 2
+    if orientation == 'UP':
+        bounding_coords = (np.array((-mid_offset, -box_size)), np.array((mid_offset + 1, 0)))
+    elif orientation == 'LEFT':
+        bounding_coords = (np.array((-box_size, -mid_offset)), np.array((0, mid_offset + 1)))
+    elif orientation == 'RIGHT':
+        bounding_coords = (np.array((1, -mid_offset)), np.array((box_size + 1, mid_offset + 1)))
+    obstacles = (board == 2)[
+        np.maximum(snake_position[0] + bounding_coords[0][0], 0):snake_position[0] + bounding_coords[1][0],
+        np.maximum(snake_position[1] + bounding_coords[0][1], 0):snake_position[1] + bounding_coords[1][1]
+    ]
+    if (np.array(obstacles.shape) < box_size).any():
+        new_obstacles = np.ones_like(kernel)
+        if orientation == 'UP':
+            new_obstacles[
+                :obstacles.shape[0],
+                box_size - obstacles.shape[1]:
+            ] = obstacles
+        elif orientation == 'LEFT':
+            new_obstacles[
+                box_size - obstacles.shape[0]:,
+                box_size - obstacles.shape[1]:
+            ] = obstacles
+        elif orientation == 'RIGHT':
+            new_obstacles[
+                :obstacles.shape[0],
+                box_size - obstacles.shape[1]:
+            ] = obstacles
+        obstacles = new_obstacles
+    return (obstacles * kernel).sum()
+
+
 def fruit_rule(game_state):
     snake_position = game_state["snake_position"]
     fruit_position = game_state["fruit_position"]
     distance = fruit_position - snake_position
+    total_distance = np.abs(distance).sum()
 
     dist_max = (max(window_x, window_y) // pixel_size)
     dy_range = np.arange(-dist_max, dist_max)
     dy_high = fuzz.smf(dy_range, -10, 0)
     dy_low = 1 - dy_high
+
+    dist_range = np.arange(0, dist_max * 2)
+    dist_func = fuzz.sigmf(dist_range, dist_max * 2 - 10, 1)[::-1] * .5 + .5
 
     # dy_high -> trzeba zawrocic/skrecic
     # dy_low -> idziemy w strone owoca
@@ -60,7 +121,7 @@ def fruit_rule(game_state):
     # dx_plus -> prawo
     # dx_center -> do przodu
     zero_index = np.where(dy_range == 0)[0][0]
-    dx_center = fuzz.gaussmf(dy_range, 0, 3)
+    dx_center = fuzz.gaussmf(dy_range, 0, 2)
     dx_plus = 1 - dx_center
     dx_plus[0:zero_index] = 0
     dx_minus = 1 - dx_center
@@ -69,13 +130,15 @@ def fruit_rule(game_state):
     dx_level_low = fuzz.interp_membership(dy_range, dx_minus, distance[0])
     dx_level_center = fuzz.interp_membership(dy_range, dx_center, distance[0])
     dx_level_high = fuzz.interp_membership(dy_range, dx_plus, distance[0])
+    closeness = fuzz.interp_membership(dist_range, dist_func, total_distance)
 
     return {
         "dy_low": dy_level_low,
         "dy_high": dy_level_high,
         "dx_low": dx_level_low,
         "dx_center": dx_level_center,
-        "dx_high": dx_level_high
+        "dx_high": dx_level_high,
+        "closeness": closeness
     }
 
 
@@ -112,11 +175,28 @@ def walls_rule(game_state):
     }
 
 
+def obstacles_rule(game_state):
+    board = make_board(game_state)
+    value_range = np.arange(0, 2.01, 0.01)
+    membership_func = fuzz.sigmf(value_range, 1, 8)
+    return {
+        'obstacles_forward': fuzz.interp_membership(value_range, membership_func, count_obstacles(board, 'UP')),
+        'obstacles_left': fuzz.interp_membership(value_range, membership_func, count_obstacles(board, 'LEFT')),
+        'obstacles_right': fuzz.interp_membership(value_range, membership_func, count_obstacles(board, 'RIGHT'))
+    }
+
+
 def evaluate_rules(rules):
     dir_range = np.arange(0, 1, 0.01)
-    dir_forward = fuzz.trimf(dir_range, [0.3, 0.5, 0.7])
-    dir_left = fuzz.trimf(dir_range, [0, 0.1, 0.3])
-    dir_right = fuzz.trimf(dir_range, [0.7, 0.9, 1.])
+    dir_forward = fuzz.trimf(dir_range, [0.4, 0.5, 0.6])
+    dir_left_strong = fuzz.trimf(dir_range, [0., 0.2, 0.3])
+    dir_right_strong = fuzz.trimf(dir_range, [0.7, 0.8, 1.])
+    dir_left_weak = fuzz.trapmf(dir_range, [0., 0.1, 0.1, 0.3])
+    dir_right_weak = fuzz.trapmf(dir_range, [0.7, 0.9, 0.9, 1.])
+    dir_right_tiebreaker = fuzz.trapmf(dir_range, [0.5, 0.6, 0.7, .8])
+    
+    dir_left_very_weak = fuzz.trapmf(dir_range, [.3, 0.4, 0.4, 0.5])
+    dir_right_very_weak = fuzz.trapmf(dir_range, [0.5, 0.6, 0.6, .7])
 
     # 1 rule: if dy_low and dx_center => dir_forward
     # 2 rule: if dy_high and dx_low => dir_left
@@ -125,25 +205,50 @@ def evaluate_rules(rules):
     # 5 rule: if wall_y_low and wall_x_high => dir_left
 
     out_activations = []
-    rule1 = np.fmin(rules["dy_low"], rules["dx_center"])
+    rule1 = np.fmin(np.fmin(np.fmin(rules["dy_low"], rules["dx_center"]), rules["closeness"]), 1 - rules['obstacles_forward'])
     out_activations.append(np.fmin(rule1, dir_forward))
 
-    rule2 = np.fmin(rules["dy_high"], rules["dx_low"])
-    out_activations.append(np.fmin(rule2, dir_left))
+    rule2 = np.fmin(np.fmin(np.fmin(rules["dy_high"], rules["dx_low"]), rules["closeness"]), 1 - rules['obstacles_left'])
+    out_activations.append(np.fmin(rule2, dir_left_strong))
 
-    rule3 = np.fmin(rules["dy_high"], rules["dx_high"])
-    out_activations.append(np.fmin(rule3, dir_right))
+    rule3 = np.fmin(np.fmin(np.fmin(rules["dy_high"], rules["dx_high"]), rules["closeness"]), 1 - rules['obstacles_right'])
+    out_activations.append(np.fmin(rule3, dir_right_strong))
 
-    rule4 = np.fmin(rules["wall_y_low"], rules["wall_x_low"])
-    out_activations.append(np.fmin(rule4, dir_right))
+    # rule4 = np.fmin(rules["wall_y_low"], rules["wall_x_low"])
+    # out_activations.append(np.fmin(rule4, dir_right_weak))
 
-    rule5 = np.fmin(rules["wall_y_low"], rules["wall_x_high"])
-    out_activations.append(np.fmin(rule5, dir_left))
+    # rule5 = np.fmin(rules["wall_y_low"], rules["wall_x_high"])
+    # out_activations.append(np.fmin(rule5, dir_left_weak))
+
+    # rule6 = np.fmin(np.fmin(rules["dy_high"], rules["dx_center"]), 1 - rules['obstacles_right'])
+    # out_activations.append(np.fmin(rule6, dir_right_tiebreaker))
+
+    rule8 = np.fmin(np.fmin(rules['obstacles_forward'], rules['obstacles_right']), 1 - rules['obstacles_left'])
+    out_activations.append(np.fmin(rule8, dir_left_weak))
+
+    rule9 = np.fmin(np.fmin(rules['obstacles_forward'], rules['obstacles_left']), 1 - rules['obstacles_right'])
+    out_activations.append(np.fmin(rule9, dir_right_weak))
+
+    rule10 = np.fmin(rules['obstacles_forward'], rules["dx_low"])
+    out_activations.append(np.fmin(rule10, dir_left_weak))
+
+    rule11 = np.fmin(rules['obstacles_forward'], rules["dx_high"])
+    out_activations.append(np.fmin(rule11, dir_right_weak))
+
+    rule12 = np.fmin(rules['obstacles_right'], 1 - rules['obstacles_left'])
+    out_activations.append(np.fmin(rule12, dir_left_very_weak))
+
+    rule13 = np.fmin(rules['obstacles_left'], 1 - rules['obstacles_right'])
+    out_activations.append(np.fmin(rule13, dir_right_very_weak))
 
     aggregated = np.fmax(out_activations[0], out_activations[1])
     for activation in out_activations[2:]:
         aggregated = np.fmax(aggregated, activation)
+    if aggregated.max() < 1e-3:
+        return None
     out = fuzz.defuzz(dir_range, aggregated, 'centroid')
+    print(rules)
+    print(rule1, rule2, rule3, rule8, rule9, rule10, rule11, out)
     return out
 
 
@@ -198,25 +303,25 @@ def calculate_direction(snake_position, snake_direction, snake_body, fruit_posit
     rules = {}
     rules.update(fruit_rule(game_state))
     rules.update(walls_rule(game_state))
-    try:
-        out = evaluate_rules(rules)
-    except AssertionError as e:
-        print(e)
+    rules.update(obstacles_rule(game_state))
+    out = evaluate_rules(rules)
+    if out is None:
         out = 0.5
 
     directions = ['UP', 'RIGHT', 'DOWN', 'LEFT']
     direction_index = 0
-    if out < 0.2:
+    if out < 0.3:
         direction_index = 3
-    elif out > 0.8:
+    elif out > 0.7:
         direction_index = 1
 
     chosen_direction = directions[(direction_index + directions.index(snake_direction)) % len(directions)]
 
-    while will_collide_with_itself(snake_position, snake_body, chosen_direction):
-        chosen_direction = random.choice([dir_candidate for dir_candidate in directions if dir_candidate != chosen_direction])
-        print('Changed to: ',chosen_direction)
-    chosen_direction = avoid_wall(chosen_direction, snake_position)
+    # while will_collide_with_itself(snake_position, snake_body, chosen_direction):
+    #     chosen_direction = random.choice([dir_candidate for dir_candidate in directions if dir_candidate != chosen_direction])
+    #     print('Changed to: ',chosen_direction)
+    # chosen_direction = avoid_wall(chosen_direction, snake_position)
+    # print(rules)
     return chosen_direction
 
 # 11 5
