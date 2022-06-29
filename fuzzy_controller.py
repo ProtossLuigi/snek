@@ -247,8 +247,8 @@ def evaluate_rules(rules):
     if aggregated.max() < 1e-3:
         return None
     out = fuzz.defuzz(dir_range, aggregated, 'centroid')
-    print(rules)
-    print(rule1, rule2, rule3, rule8, rule9, rule10, rule11, out)
+    # print(rules)
+    # print(rule1, rule2, rule3, rule8, rule9, rule10, rule11, out)
     return out
 
 
